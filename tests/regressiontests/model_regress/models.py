@@ -57,3 +57,16 @@ class BrokenUnicodeMethod(models.Model):
 
 class NonAutoPK(models.Model):
     name = models.CharField(max_length=10, primary_key=True)
+
+
+#18432: Chained foreign keys with to_field produce incorrect query
+class Model1(models.Model):
+    pkey = models.IntegerField(unique=True, db_index=True)
+
+
+class Model2(models.Model):
+    model1 = models.ForeignKey(Model1, unique=True, to_field='pkey')
+
+
+class Model3(models.Model):
+    model2 = models.ForeignKey(Model2, unique=True, to_field='model1')
