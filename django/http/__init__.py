@@ -4,7 +4,7 @@ import re
 import time
 from pprint import pformat
 from urllib import urlencode, quote
-from urlparse import urljoin
+from urlparse import urljoin, urlparse
 try:
     from cStringIO import StringIO
 except ImportError:
@@ -117,6 +117,7 @@ class CompatCookie(SimpleCookie):
         warnings.warn("CompatCookie is deprecated, use django.http.SimpleCookie instead.",
                       PendingDeprecationWarning)
 
+from django.core.exceptions import SuspiciousOperation
 from django.utils.datastructures import MultiValueDict, ImmutableList
 from django.utils.encoding import smart_str, iri_to_uri, force_unicode
 from django.utils.http import cookie_date
@@ -128,6 +129,8 @@ from utils import *
 RESERVED_CHARS="!*'();:@&=+$,/?%#[]"
 
 absolute_http_url_re = re.compile(r"^https?://", re.I)
+host_validation_re = re.compile(r"^([a-z0-9.-]+|\[[a-f0-9]*:[a-f0-9:]+\])(:\d+)?$")
+
 
 class Http404(Exception):
     pass
@@ -164,6 +167,11 @@ class HttpRequest(object):
             server_port = str(self.META['SERVER_PORT'])
             if server_port != (self.is_secure() and '443' or '80'):
                 host = '%s:%s' % (host, server_port)
+
+        # Disallow potentially poisoned hostnames.
+        if not host_validation_re.match(host.lower()):
+            raise SuspiciousOperation('Invalid HTTP_HOST header: %s' % host)
+
         return host
 
     def get_full_path(self):
@@ -635,19 +643,21 @@ class HttpResponse(object):
             raise Exception("This %s instance cannot tell its position" % self.__class__)
         return sum([len(chunk) for chunk in self._container])
 
-class HttpResponseRedirect(HttpResponse):
+class HttpResponseRedirectBase(HttpResponse):
+    allowed_schemes = ['http', 'https', 'ftp']
+
+    def __init__(self, redirect_to):
+        super(HttpResponseRedirectBase, self).__init__()
+        parsed = urlparse(redirect_to)
+        if parsed[0] and parsed[0] not in self.allowed_schemes:
+            raise SuspiciousOperation("Unsafe redirect to URL with scheme '%s'" % parsed[0])
+        self['Location'] = iri_to_uri(redirect_to)
+
+class HttpResponseRedirect(HttpResponseRedirectBase):
     status_code = 302
 
-    def __init__(self, redirect_to):
-        super(HttpResponseRedirect, self).__init__()
-        self['Location'] = iri_to_uri(redirect_to)
-
-class HttpResponsePermanentRedirect(HttpResponse):
+class HttpResponsePermanentRedirect(HttpResponseRedirectBase):
     status_code = 301
-
-    def __init__(self, redirect_to):
-        super(HttpResponsePermanentRedirect, self).__init__()
-        self['Location'] = iri_to_uri(redirect_to)
 
 class HttpResponseNotModified(HttpResponse):
     status_code = 304
