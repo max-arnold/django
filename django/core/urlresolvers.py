@@ -18,6 +18,7 @@ from django.utils.encoding import iri_to_uri, force_unicode, smart_str
 from django.utils.functional import memoize
 from django.utils.importlib import import_module
 from django.utils.regex_helper import normalize
+from django.utils.module_loading import module_has_submodule
 
 _resolver_cache = {} # Maps URLconf modules to RegexURLResolver instances.
 _ns_resolver_cache = {} # Maps namespaces to RegexURLResolver instances.
